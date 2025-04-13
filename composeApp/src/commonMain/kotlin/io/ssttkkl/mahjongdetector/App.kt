@@ -11,7 +11,6 @@ import androidx.compose.material.Button
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
-import androidx.compose.material.rememberScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,6 +24,40 @@ import androidx.compose.ui.graphics.ImageBitmap
 import io.github.vinceglb.filekit.dialogs.FileKitType
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
 import kotlinx.coroutines.launch
+import network.chaintech.cmpimagepickncrop.imagecropper.ImageCropResult
+import network.chaintech.cmpimagepickncrop.imagecropper.ImageCropper
+import network.chaintech.cmpimagepickncrop.imagecropper.cropImage
+import network.chaintech.cmpimagepickncrop.imagecropper.rememberImageCropper
+import network.chaintech.cmpimagepickncrop.ui.ImageCropperDialogContainer
+
+@Composable
+fun PickImageButton(
+    cropper: ImageCropper = rememberImageCropper(),
+    onPick: (ImageBitmap) -> Unit
+) {
+    val coroutineScope = rememberCoroutineScope()
+
+    val picker = rememberFilePickerLauncher(
+        type = FileKitType.Image
+    ) { file ->
+        coroutineScope.launch {
+            runCatching { checkNotNull(file?.loadAsImage()) }
+                .onFailure { e -> e.printStackTrace() }
+                .map { originImg ->
+                    val cropResult = cropper.cropImage(bmp = originImg)
+                    if (cropResult is ImageCropResult.Success) {
+                        onPick(cropResult.bitmap)
+                    }
+                }
+        }
+    }
+
+    Button(
+        onClick = {
+            picker.launch()
+        },
+    ) { Text("Choose Image") }
+}
 
 @Composable
 fun App() = MaterialTheme {
@@ -32,27 +65,11 @@ fun App() = MaterialTheme {
         modifier = Modifier.fillMaxSize(),
         backgroundColor = Color.White
     ) {
+        val coroutineScope = rememberCoroutineScope()
+        val cropper = rememberImageCropper()
+
         var selectedImage by remember { mutableStateOf<ImageBitmap?>(null) }
         var result by remember { mutableStateOf("") }
-
-        val coroutineScope = rememberCoroutineScope()
-
-        val launcher = rememberFilePickerLauncher(
-            type = FileKitType.Image
-        ) { file ->
-            println(file)
-            coroutineScope.launch {
-                try {
-                    val image = file?.loadAsImage()
-                    if (image != null) {
-                        selectedImage = ImagePreprocessor.preprocessImage(image).first
-                        result = MahjongDetector.predict(image).joinToString()
-                    }
-                } catch (e: Throwable) {
-                    e.printStackTrace()
-                }
-            }
-        }
 
         Column(
             modifier = Modifier
@@ -77,11 +94,18 @@ fun App() = MaterialTheme {
                     Text("No image selected !", color = Color.Black)
                 }
 
-            Button(
-                onClick = {
-                    launcher.launch()
-                },
-            ) { Text("Choose Image") }
+            PickImageButton(cropper, onPick = {
+                selectedImage = it
+                coroutineScope.launch {
+                    runCatching {
+                        result = MahjongDetector.predict(it).joinToString()
+                    }
+                }
+            })
+        }
+
+        cropper.imageCropState?.let { cropState ->
+            ImageCropperDialogContainer(cropState)
         }
     }
 }
