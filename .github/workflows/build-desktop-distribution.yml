@@ -1,0 +1,224 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+# This workflow will build a Java project with Gradle and cache/restore any dependencies to improve the workflow execution time
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-gradle
+
+name: Desktop Distribution
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  checks: write
+
+  actions: read
+  issues: read
+  packages: write
+  pull-requests: read
+  repository-projects: read
+  statuses: read
+  
+jobs:
+  build-on-windows:
+    
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout my repository
+      uses: actions/checkout@v3
+      with:
+        submodules: 'true'
+
+    - name: Setup Java JDK
+      uses: actions/setup-java@v3
+      with:
+        distribution: temurin
+        java-version: |
+          11
+          17
+        cache: 'gradle'
+
+    - name: Package Distribution
+      run: |
+        ./gradlew composeApp:createReleaseDistributable composeApp:packageReleaseDistributionForCurrentOS composeApp:packageReleaseUberJarForCurrentOS
+
+    - name: Rename Distribution
+      run: |
+        Set-Location composeApp/build/compose/binaries/main-release/exe
+        Get-ChildItem *.exe | ForEach-Object {
+          $newName = $_.Name -replace '\.exe$', '-x64.exe'
+          Rename-Item -Path $_.FullName -NewName $newName
+        }
+
+    - name: Zip Distribution
+      run: |
+        $versionFileContent = Get-Content -Path composeApp\version.properties -Raw
+        if ($versionFileContent -match 'versionName=(.*)') {
+          $versionName = $matches[1].Trim()
+          Write-Host "提取的版本号: $versionName"
+        
+          Set-Location composeApp\build\compose\binaries\main-release\app
+          Compress-Archive -Path "mahjong-utils-app\*" -DestinationPath mahjong-utils-app-windows-x64-$versionName.zip -CompressionLevel Optimal
+        }
+        else {
+          Write-Error "未找到 versionName 属性"
+          exit 1
+        }
+
+    - name: Upload the Build Artifact
+      uses: actions/upload-artifact@v4.6.1
+      with:
+        name: distribution-windows
+        path: |
+          composeApp/build/compose/binaries/main-release/exe/*.exe
+          composeApp/build/compose/binaries/main-release/app/*.zip
+          composeApp/build/compose/jars/*.jar
+
+    - name: Upload Release Assets
+      if: ${{ github.event_name == 'release' }}
+      uses: AButler/upload-release-assets@v3.0
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        files: "composeApp/build/compose/binaries/main-release/exe/*.exe;composeApp/build/compose/binaries/main-release/app/*.zip;composeApp/build/compose/jars/*.jar"
+        
+  build-on-macos-arm64:
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout my repository
+      uses: actions/checkout@v3
+      with:
+        submodules: 'true'
+
+    - name: Setup Java JDK
+      uses: actions/setup-java@v3
+      with:
+        distribution: temurin
+        java-version: |
+          11
+          17
+        cache: 'gradle'
+
+    - name: Package Distribution
+      run: |
+        ./gradlew composeApp:packageReleaseDistributionForCurrentOS composeApp:packageReleaseUberJarForCurrentOS
+
+    - name: Rename Distribution
+      run: |
+        cd composeApp/build/compose/binaries/main-release/dmg
+        for file in *.dmg; do
+          mv "$file" "${file%.dmg}-arm64.dmg"
+        done
+
+    - name: Upload the Build Artifact
+      uses: actions/upload-artifact@v4.6.1
+      with:
+        name: distribution-macos-arm64
+        path: |
+          composeApp/build/compose/binaries/main-release/dmg/*
+          composeApp/build/compose/jars/*.jar
+
+    - name: Upload Release Assets
+      if: ${{ github.event_name == 'release' }}
+      uses: AButler/upload-release-assets@v3.0
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        files: "composeApp/build/compose/binaries/main-release/dmg/*;composeApp/build/compose/jars/*.jar"
+
+
+  build-on-macos-x64:
+    runs-on: macos-13
+
+    steps:
+      - name: Checkout my repository
+        uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: |
+            11
+            17
+          cache: 'gradle'
+
+      - name: Package Distribution
+        run: |
+          ./gradlew composeApp:packageReleaseDistributionForCurrentOS composeApp:packageReleaseUberJarForCurrentOS
+
+      - name: Rename Distribution
+        run: |
+          cd composeApp/build/compose/binaries/main-release/dmg
+          for file in *.dmg; do
+            mv "$file" "${file%.dmg}-x64.dmg"
+          done
+
+      - name: Upload the Build Artifact
+        uses: actions/upload-artifact@v4.6.1
+        with:
+          name: distribution-macos-x64
+          path: |
+            composeApp/build/compose/binaries/main-release/dmg/*
+            composeApp/build/compose/jars/*.jar
+
+      - name: Upload Release Assets
+        if: ${{ github.event_name == 'release' }}
+        uses: AButler/upload-release-assets@v3.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          files: "composeApp/build/compose/binaries/main-release/dmg/*;composeApp/build/compose/jars/*.jar"
+
+
+  build-on-linux:
+    
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout my repository
+        uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: |
+            11
+            17
+          cache: 'gradle'
+
+      - name: Install FUSE (linux)
+        uses: ConorMacBride/install-package@v1.1.0
+        with:
+          apt: libfuse2
+
+      - name: Package Distribution
+        run: |
+          ./gradlew composeApp:packageReleaseDistributionForCurrentOS composeApp:packageReleaseUberJarForCurrentOS
+
+      - name: Upload the Build Artifact
+        uses: actions/upload-artifact@v4.6.1
+        with:
+          name: distribution-linux
+          path: |
+            composeApp/build/appimage/main-release/*.AppImage
+            composeApp/build/compose/jars/*.jar
+
+      - name: Upload Release Assets
+        if: ${{ github.event_name == 'release' }}
+        uses: AButler/upload-release-assets@v3.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          files: "composeApp/build/appimage/main-release/*.AppImage;composeApp/build/compose/jars/*.jar"

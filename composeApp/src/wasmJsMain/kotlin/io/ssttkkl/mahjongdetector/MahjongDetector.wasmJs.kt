@@ -1,0 +1,84 @@
+package io.ssttkkl.mahjongdetector
+
+
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asSkiaBitmap
+import kotlinx.coroutines.await
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
+private fun predict(model: GraphModel, tensor: Tensor): Tensor? = js(
+    """
+      function(){
+        try {
+          return model.predict(tensor, {verbose: true})
+        } catch(e) { 
+          console.error(e)
+          return null 
+        }
+      }()
+    """
+)
+
+actual object MahjongDetector {
+    private val CLASS_NAME = listOf(
+        "1m", "1p", "1s",
+        "2m", "2p", "2s",
+        "3m", "3p", "3s",
+        "4m", "4p", "4s",
+        "5m", "5p", "5s",
+        "6m", "6p", "6s",
+        "7m", "7p", "7s",
+        "8m", "8p", "8s",
+        "9m", "9p", "9s",
+        "chun", "haku", "hatsu", "nan", "pe", "sha", "tou"
+    )
+
+    private lateinit var model: GraphModel
+    private var modelLoaded: Boolean = false
+    private val modelLoadMutex = Mutex()
+
+    private suspend fun prepareModel() {
+        if (!modelLoaded) {
+            modelLoadMutex.withLock {
+                if (!modelLoaded) {
+                    model = Tf.loadGraphModel("best_web_model/model.json").await()
+                    modelLoaded = true
+                }
+            }
+        }
+    }
+
+    actual suspend fun predict(image: ImageBitmap): List<String> {
+        prepareModel()
+
+        val (preprocessed, paddingInfo) = ImagePreprocessor.preprocessImage(image)
+        val inputTensor = createInputTensor(preprocessed)  // 1*640*640*3
+        inputTensor.print(verbose = true)
+        val outputTensor = checkNotNull(predict(model, inputTensor))  // 1*(4+classes)*8400
+        outputTensor.print(verbose = true)
+        val outputArr = outputTensor.array<JsArray<JsArray<JsArray<JsNumber>>>>()
+            .await<JsArray<JsArray<JsArray<JsNumber>>>>()
+        val output: Array<FloatArray> = Array(4 + CLASS_NAME.size) { i ->
+            FloatArray(8400) { j ->
+                outputArr[0]!![i]!![j]!!.toDouble().toFloat()
+            }
+        }
+        val detections = YoloV8PostProcessor.postprocess(output, paddingInfo, CLASS_NAME.size)
+        detections.forEach {
+            println(it)
+        }
+
+        inputTensor.dispose()
+        return detections.sortedBy { it.x1 }.map { CLASS_NAME[it.classId] }
+    }
+
+    private fun createInputTensor(image: ImageBitmap): Tensor {
+        val imgData = image.asSkiaBitmap().toImageData()
+        val tensor = Tf.Browser.fromPixels(imgData)
+            .toFloat()
+            .div(255.0f)
+            .expandDims(0)
+        return tensor
+    }
+}
