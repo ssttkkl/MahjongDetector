@@ -1,14 +1,14 @@
 import threading
 from pathlib import Path
 from typing import List, NamedTuple
+import onnxruntime as rt
 
 import numpy as np
 from PIL import Image
-import tflite_runtime.interpreter as tflite
 
 from .preprocess import PaddingInfo
 
-model_path = Path(__file__).parent / "model_float16.tflite"
+model_path = Path(__file__).parent / "model.onnx"
 
 CLASS_NAMES = [
     "1m",
@@ -51,12 +51,11 @@ CLASS_NAMES = [
 threadlocal = threading.local()
 
 
-def get_interpreter() -> tflite.Interpreter:
-    """为每个线程获取独立的Interpreter实例（懒初始化）"""
-    if not hasattr(threadlocal, "interpreter"):
-        threadlocal.interpreter = tflite.Interpreter(model_path=model_path)
-        threadlocal.interpreter.allocate_tensors()
-    return threadlocal.interpreter
+def get_inference_session() -> rt.InferenceSession:
+    """为每个线程获取独立的InferenceSession实例（懒初始化）"""
+    if not hasattr(threadlocal, "session"):
+        threadlocal.session = rt.InferenceSession(model_path)
+    return threadlocal.session
 
 
 class Detection(NamedTuple):
@@ -70,7 +69,7 @@ class Detection(NamedTuple):
 
 def create_input_tensor(img: Image.Image):
     return (
-        np.array(img.convert("RGB"), dtype=np.float32)[np.newaxis, ...] / 255.0
+        np.array(img.convert("RGB"), dtype=np.float32).transpose(2, 0, 1)[np.newaxis, ...] / 255.0
     )  # 添加batch维度并归一化
 
 
@@ -202,20 +201,12 @@ def calculate_iou(box1: np.ndarray, box2: np.ndarray) -> float:
 
 
 def predict(img: Image.Image, padding_info: PaddingInfo) -> list[Detection]:
-    interpreter = get_interpreter()
+    session = get_inference_session()
 
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
-
+    input_name = session.get_inputs()[0].name
     input_data = create_input_tensor(img)
-    interpreter.set_tensor(input_details[0]["index"], input_data)
-    interpreter.invoke()
-
-    # 获取输出
-    output_data = interpreter.get_tensor(
-        output_details[0]["index"]
-    )  # 形状 [1,4+numClasses,8400]
+    outputs = session.run(None, {input_name: input_data})
     detections = postprocess(
-        output_data[0, ...], padding_info, num_classes=len(CLASS_NAMES)
+        outputs[0][0, ...], padding_info, num_classes=len(CLASS_NAMES)
     )
     return detections

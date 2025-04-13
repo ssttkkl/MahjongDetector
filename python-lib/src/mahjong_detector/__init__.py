@@ -12,10 +12,3 @@ def detect_tiles(img: bytes) -> list[str]:
 
 
 __all__ = ("detect_tiles",)
-
-
-# 使用示例
-if __name__ == "__main__":
-    input_img = Image.open("input.png")
-    result = detect_tiles(input_img)
-    print(result)
