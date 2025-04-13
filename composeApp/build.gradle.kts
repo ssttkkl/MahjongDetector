@@ -55,11 +55,6 @@ kotlin {
     
     sourceSets {
         val desktopMain by getting
-        
-        androidMain.dependencies {
-            implementation(compose.preview)
-            implementation(libs.androidx.activity.compose)
-        }
         commonMain.dependencies {
             implementation(compose.runtime)
             implementation(compose.foundation)
@@ -77,6 +72,13 @@ kotlin {
             implementation("network.chaintech:cmp-image-pick-n-crop:1.0.8")
         }
 
+        androidMain.dependencies {
+            implementation(compose.preview)
+            implementation(libs.androidx.activity.compose)
+            implementation(libs.litert)
+            implementation(libs.litert.support.api)
+        }
+
         val skiaMain by creating {
             dependsOn(commonMain.get())
 
@@ -85,9 +87,6 @@ kotlin {
             wasmJsMain.get().dependsOn(this)
         }
 
-        androidMain.dependencies {
-            implementation("com.microsoft.onnxruntime:onnxruntime-android:latest.release")
-        }
         desktopMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutines.swing)

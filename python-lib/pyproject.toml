@@ -1,0 +1,59 @@
+[project]
+name = "mahjong-detector"
+version = "0.0.1"
+description = "Detect mahjong tiles from image"
+authors = [
+    {name = "ssttkkl", email = "huang.wen.long@hotmail.com"},
+]
+dependencies = [
+    "tflite-runtime>=2.18.0",
+    "Pillow>=11.2.1",
+    "numpy>=2.2.4"
+]
+requires-python = ">=3.9"
+readme = "README.md"
+license = {text = "MIT"}
+
+[dependency-groups]
+dev = [
+    "tflite-runtime @ file:///Users/huangwenlong/Downloads/tflite_runtime-2.18.0-cp312-cp312-macosx_15_0_arm64.whl",
+    "ruff<1.0.0,>=0.0.275",
+    "isort<6.0.0,>=5.10.1",
+    "black<24.0.0,>=23.1.0",
+    "pre-commit<4.0.0,>=3.1.0",
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py38", "py39", "py310", "py311"]
+include = '\.pyi?$'
+extend-exclude = '''
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 88
+length_sort = true
+skip_gitignore = true
+force_sort_within_sections = true
+extra_standard_library = ["typing_extensions"]
+
+[tool.ruff]
+lint.select = ["E", "W", "F", "UP", "C", "T", "PYI", "PT", "Q"]
+lint.ignore = ["C901", "E402", "F403", "T201"]
+
+line-length = 160
+target-version = "py38"
+
+[tool.ruff.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+
+[tool.pdm]
+distribution = true
