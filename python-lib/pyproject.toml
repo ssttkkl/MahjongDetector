@@ -1,12 +1,12 @@
 [project]
 name = "mahjong-detector"
-version = "0.0.2"
+version = "0.0.3"
 description = "Detect mahjong tiles from image"
 authors = [
     {name = "ssttkkl", email = "huang.wen.long@hotmail.com"},
 ]
 dependencies = [
-    "tflite-runtime>=2.18.0",
+    "tflite-runtime>=2.0.0",
     "Pillow>=11.2.1",
     "numpy>=2.2.4"
 ]
