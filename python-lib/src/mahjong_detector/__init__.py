@@ -1,6 +1,7 @@
-from mahjong_detector.predict import CLASS_NAMES, predict
-from mahjong_detector.preprocess import preprocess_image
 from PIL import Image
+
+from .preprocess import preprocess_image
+from .predict import CLASS_NAMES, predict
 
 
 def detect_tiles(img: bytes) -> list[str]:

@@ -1,9 +1,12 @@
+import threading
 from pathlib import Path
-from PIL import Image
-from mahjong_detector.preprocess import PaddingInfo
-import tflite_runtime.interpreter as tflite
-import numpy as np
 from typing import List, NamedTuple
+
+import numpy as np
+from PIL import Image
+import tflite_runtime.interpreter as tflite
+
+from .preprocess import PaddingInfo
 
 model_path = Path(__file__).parent / "model_float16.tflite"
 
@@ -45,8 +48,15 @@ CLASS_NAMES = [
 ]
 
 
-def create_input_tensor(img: Image.Image):
-    return np.array(img.convert("RGB"), dtype=np.float32)[np.newaxis, ...] / 255.0  # 添加batch维度并归一化
+threadlocal = threading.local()
+
+
+def get_interpreter() -> tflite.Interpreter:
+    """为每个线程获取独立的Interpreter实例（懒初始化）"""
+    if not hasattr(threadlocal, "interpreter"):
+        threadlocal.interpreter = tflite.Interpreter(model_path=model_path)
+        threadlocal.interpreter.allocate_tensors()
+    return threadlocal.interpreter
 
 
 class Detection(NamedTuple):
@@ -58,7 +68,19 @@ class Detection(NamedTuple):
     confidence: float
 
 
-def postprocess(output: np.ndarray, padding: PaddingInfo, num_classes: int, conf_threshold: float = 0.5, iou_threshold: float = 0.5) -> List[Detection]:
+def create_input_tensor(img: Image.Image):
+    return (
+        np.array(img.convert("RGB"), dtype=np.float32)[np.newaxis, ...] / 255.0
+    )  # 添加batch维度并归一化
+
+
+def postprocess(
+    output: np.ndarray,
+    padding: PaddingInfo,
+    num_classes: int,
+    conf_threshold: float = 0.5,
+    iou_threshold: float = 0.5,
+) -> List[Detection]:
     """
     YOLOv8 后处理 (纯NumPy实现)
 
@@ -74,7 +96,9 @@ def postprocess(output: np.ndarray, padding: PaddingInfo, num_classes: int, conf
     """
     # 1. 检查输出形状
     if output.shape != (84, 8400) and output.shape != (4 + num_classes, 8400):
-        raise ValueError(f"非法输出格式，预期[84,8400]或[{4 + num_classes},8400]，实际{output.shape}")
+        raise ValueError(
+            f"非法输出格式，预期[84,8400]或[{4 + num_classes},8400]，实际{output.shape}"
+        )
 
     # 2. 提取框数据 (xc, yc, w, h)
     boxes = output[:4].T  # [8400, 4]
@@ -150,7 +174,9 @@ def nms(boxes: np.ndarray, scores: np.ndarray, iou_threshold: float) -> List[int
 
         inter = np.maximum(0.0, xx2 - xx1) * np.maximum(0.0, yy2 - yy1)
         area_i = (boxes[i, 2] - boxes[i, 0]) * (boxes[i, 3] - boxes[i, 1])
-        area_other = (boxes[order[1:], 2] - boxes[order[1:], 0]) * (boxes[order[1:], 3] - boxes[order[1:], 1])
+        area_other = (boxes[order[1:], 2] - boxes[order[1:], 0]) * (
+            boxes[order[1:], 3] - boxes[order[1:], 1]
+        )
         iou = inter / (area_i + area_other - inter)
 
         # 保留IoU低于阈值的框
@@ -176,8 +202,7 @@ def calculate_iou(box1: np.ndarray, box2: np.ndarray) -> float:
 
 
 def predict(img: Image.Image, padding_info: PaddingInfo) -> list[Detection]:
-    interpreter = tflite.Interpreter(model_path=str(model_path))
-    interpreter.allocate_tensors()  # 分配张量内存
+    interpreter = get_interpreter()
 
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
@@ -187,6 +212,10 @@ def predict(img: Image.Image, padding_info: PaddingInfo) -> list[Detection]:
     interpreter.invoke()
 
     # 获取输出
-    output_data = interpreter.get_tensor(output_details[0]["index"])  # 形状 [1,4+numClasses,8400]
-    detections = postprocess(output_data[0, ...], padding_info, num_classes=len(CLASS_NAMES))
+    output_data = interpreter.get_tensor(
+        output_details[0]["index"]
+    )  # 形状 [1,4+numClasses,8400]
+    detections = postprocess(
+        output_data[0, ...], padding_info, num_classes=len(CLASS_NAMES)
+    )
     return detections
