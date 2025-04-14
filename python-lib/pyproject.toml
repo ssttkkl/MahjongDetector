@@ -1,6 +1,6 @@
 [project]
 name = "mahjong-detector"
-version = "0.0.5"
+version = "0.0.6"
 description = "Detect mahjong tiles from image"
 authors = [
     {name = "ssttkkl", email = "huang.wen.long@hotmail.com"},
@@ -8,7 +8,7 @@ authors = [
 dependencies = [
     "Pillow>=11.2.1",
     "numpy>=2.2.4",
-    "onnxruntime>=1.21.0"
+    "onnxruntime>=1.19.0"
 ]
 requires-python = ">=3.9"
 readme = "README.md"
