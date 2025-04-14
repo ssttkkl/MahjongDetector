@@ -1,5 +1,4 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
-import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
@@ -11,6 +10,17 @@ plugins {
     alias(libs.plugins.composeCompiler)
 }
 
+// 去掉非本平台的动态库
+dependencies {
+    listOf("linux-aarch64", "linux-x64", "osx-aarch64", "osx-x64", "win-x64").forEach {
+        registerTransform(OnnxRuntimeLibraryFilter::class.java) {
+            parameters.platform.set(it)
+            from.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "jar")
+            to.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "onnxruntime-${it}-jar")
+        }
+    }
+}
+
 kotlin {
     applyDefaultHierarchyTemplate()
 
@@ -19,7 +29,7 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_11)
         }
     }
-    
+
     listOf(
         iosX64(),
         iosArm64(),
@@ -30,9 +40,9 @@ kotlin {
             isStatic = true
         }
     }
-    
+
     jvm("desktop")
-    
+
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         moduleName = "composeApp"
@@ -52,7 +62,7 @@ kotlin {
         }
         binaries.executable()
     }
-    
+
     sourceSets {
         val desktopMain by getting
         commonMain.dependencies {
@@ -91,7 +101,21 @@ kotlin {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutines.swing)
 
-            implementation("com.microsoft.onnxruntime:onnxruntime:1.21.0")
+            val hostOs = System.getProperty("os.name")
+            val arch = System.getProperty("os.arch")
+            val artifactTypeAttr = when {
+                hostOs == "Mac OS X" && arch == "aarch64" -> "onnxruntime-osx-aarch64-jar"
+                hostOs == "Mac OS X" && arch == "x64" -> "onnxruntime-osx-x64-jar"
+                hostOs == "Linux" && arch == "x64" -> "onnxruntime-linux-x64-jar"
+                hostOs.startsWith("Windows") && arch == "x64" -> "onnxruntime-win-x64-jar"
+                else -> error("Unsupported hostOs and arch: ${hostOs}, ${arch}")
+            }
+            val onnxRuntime = dependencies.create("com.microsoft.onnxruntime:onnxruntime:1.21.0") {
+                attributes {
+                    attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, artifactTypeAttr)
+                }
+            }
+            implementation(onnxRuntime)
         }
         wasmJsMain.dependencies {
             implementation(npm("@tensorflow/tfjs", "^4.22.0"))
