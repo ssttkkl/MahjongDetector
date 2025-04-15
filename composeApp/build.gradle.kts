@@ -77,16 +77,15 @@ kotlin {
 
             implementation(libs.kotlinx.coroutines.core)
 
-            implementation("io.github.vinceglb:filekit-core:0.10.0-beta01")
-            implementation("io.github.vinceglb:filekit-dialogs-compose:0.10.0-beta01")
-            implementation("network.chaintech:cmp-image-pick-n-crop:1.0.8")
+            implementation(libs.filekit.core)
+            implementation(libs.filekit.dialogs.compose)
+            implementation(libs.cmp.image.pick.n.crop)
         }
 
         androidMain.dependencies {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
-            implementation(libs.litert)
-            implementation(libs.litert.support.api)
+            implementation(libs.onnxruntime.android)
         }
 
         val skiaMain by creating {
@@ -110,7 +109,9 @@ kotlin {
                 hostOs.startsWith("Windows") && arch == "x64" -> "onnxruntime-win-x64-jar"
                 else -> error("Unsupported hostOs and arch: ${hostOs}, ${arch}")
             }
-            val onnxRuntime = dependencies.create("com.microsoft.onnxruntime:onnxruntime:1.21.0") {
+            val onnxRuntime = dependencies.create(libs.onnxruntime.jvm.get().let {
+                "${it.group}:${it.name}:${it.version}"
+            }) {
                 attributes {
                     attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, artifactTypeAttr)
                 }
